@@ -32,7 +32,7 @@ Inspirada en el proyecto original para el portal francés
 ### Vía HACS (recomendado)
 
 1. HACS → menú ⋮ (arriba a la derecha) → **Repositorios personalizados**
-2. Repositorio: `https://github.com/Darckchu/hidraqua-custom-component-HACS/edit/main/README.md`
+2. Repositorio: `https://github.com/Darckchu/hidraqua-custom-component-HACS/`
 3. Categoría: **Integración**
 4. Instala la integración desde la lista de HACS
 5. Reinicia Home Assistant
