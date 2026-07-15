@@ -1,0 +1,11 @@
+{
+  "domain": "hidraqua",
+  "name": "Hidraqua (Veolia España)",
+  "codeowners": ["@TU_USUARIO_GITHUB"],
+  "config_flow": true,
+  "documentation": "https://github.com/TU_USUARIO_GITHUB/hidraqua-custom-component-HACS",
+  "issue_tracker": "https://github.com/TU_USUARIO_GITHUB/hidraqua-custom-component-HACS/issues",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}

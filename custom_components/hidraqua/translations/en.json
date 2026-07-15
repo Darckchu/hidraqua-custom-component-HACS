@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Conectar con Hidraqua",
+        "description": "Introduce tus credenciales del área de cliente de Hidraqua (hidraqua.veolia.es).",
+        "data": {
+          "username": "Usuario (DNI/NIE)",
+          "password": "Contraseña"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Usuario o contraseña incorrectos.",
+      "cannot_connect": "No se ha podido conectar con el portal de Hidraqua.",
+      "two_factor_not_supported": "Esta cuenta tiene doble factor activado, todavía no soportado por la integración."
+    },
+    "abort": {
+      "already_configured": "Esta cuenta ya está configurada."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "daily_consumption": {
+        "name": "Consumo diario"
+      },
+      "last_reading": {
+        "name": "Última lectura"
+      }
+    }
+  }
+}

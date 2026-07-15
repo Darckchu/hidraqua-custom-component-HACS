@@ -1,0 +1,106 @@
+"""Sensor platform for the Hidraqua (Veolia España) integration."""
+from __future__ import annotations
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from . import HidraquaDataUpdateCoordinator
+from .const import DOMAIN, MANUFACTURER
+
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up Hidraqua sensors from a config entry."""
+    coordinator: HidraquaDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    async_add_entities(
+        [
+            HidraquaDailyConsumptionSensor(coordinator, entry),
+            HidraquaLastReadingSensor(coordinator, entry),
+        ]
+    )
+
+
+class HidraquaBaseSensor(CoordinatorEntity, SensorEntity):
+    """Base entity sharing device info between Hidraqua sensors."""
+
+    def __init__(
+        self, coordinator: HidraquaDataUpdateCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry.entry_id)},
+            name=self._entry.title,
+            manufacturer=MANUFACTURER,
+            model="Contador de agua",
+        )
+
+
+class HidraquaDailyConsumptionSensor(HidraquaBaseSensor):
+    """Daily water consumption in m³ (feeds the Energy dashboard)."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "daily_consumption"
+    _attr_device_class = SensorDeviceClass.WATER
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "m³"
+    _attr_icon = "mdi:water"
+
+    def __init__(
+        self, coordinator: HidraquaDataUpdateCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_daily_consumption"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("daily_consumption")
+
+    @property
+    def extra_state_attributes(self):
+        data = self.coordinator.data
+        return {
+            "last_reading_date": data.get("last_reading_date"),
+            "consumption_type": data.get("consumption_type"),
+            "historyConsumption": data.get("history_consumption"),
+        }
+
+
+class HidraquaLastReadingSensor(HidraquaBaseSensor):
+    """Absolute meter reading in m³."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "last_reading"
+    _attr_device_class = SensorDeviceClass.WATER
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "m³"
+    _attr_icon = "mdi:gauge"
+
+    def __init__(
+        self, coordinator: HidraquaDataUpdateCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_last_reading"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("last_reading")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "last_reading_date": self.coordinator.data.get("last_reading_date"),
+        }
