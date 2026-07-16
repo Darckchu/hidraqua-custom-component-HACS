@@ -1,4 +1,12 @@
-"""Import hourly Hidraqua consumption into Home Assistant's long-term statistics."""
+"""Import hourly Hidraqua consumption into the 'last reading' sensor statistics.
+
+En vez de crear una fuente de estadísticas externa suelta (que no aparece
+como opción seleccionable en el dashboard de Energía), este módulo inyecta
+el histórico horario directamente en las estadísticas de la propia entidad
+sensor.hidraqua_ultima_lectura. El dashboard de Energía siempre lee de la
+tabla de estadísticas de la entidad seleccionada, así que en cuanto esa
+entidad tiene puntos horarios, el panel "Agua" los pinta automáticamente.
+"""
 from __future__ import annotations
 
 import logging
@@ -7,17 +15,23 @@ from datetime import date, timedelta
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import (
-    async_add_external_statistics,
+    async_import_statistics,
     get_last_statistics,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 import homeassistant.util.dt as dt_util
 
 from .api import HidraquaApiError, HidraquaClient
-from .const import DOMAIN
+from .const import DOMAIN, LAST_READING_UNIQUE_ID_SUFFIX
 
 _LOGGER = logging.getLogger(__name__)
+
+# Al añadir la integración por primera vez no cargamos el año entero de golpe
+# (serían ~8760 llamadas paginadas): empezamos con un mes y desde ahí el
+# import es incremental en cada ciclo del coordinador.
+INITIAL_BACKFILL_DAYS = 30
 
 try:
     # Disponible desde HA 2024.x aprox.; en versiones futuras (2026.11+)
@@ -28,35 +42,41 @@ try:
 except ImportError:
     _HAS_MEAN_TYPE = False
 
-# Al añadir la integración por primera vez no cargamos el año entero de golpe
-# (serían ~8760 llamadas paginadas): empezamos con un mes y desde ahí el
-# import es incremental en cada ciclo del coordinador.
-INITIAL_BACKFILL_DAYS = 30
 
-
-def _statistic_id(entry: ConfigEntry) -> str:
-    return f"{DOMAIN}:consumo_horario_{entry.entry_id.lower()}"
+def _find_last_reading_entity_id(hass: HomeAssistant, entry: ConfigEntry) -> str | None:
+    """Look up the real entity_id of the 'última lectura' sensor."""
+    unique_id = f"{entry.entry_id}_{LAST_READING_UNIQUE_ID_SUFFIX}"
+    registry = er.async_get(hass)
+    return registry.async_get_entity_id("sensor", DOMAIN, unique_id)
 
 
 async def async_import_hourly_statistics(
     hass: HomeAssistant, entry: ConfigEntry, client: HidraquaClient
 ) -> None:
-    """Fetch new hourly consumption records and feed the recorder statistics."""
-    statistic_id = _statistic_id(entry)
-    _LOGGER.debug("Import horario: iniciando para %s", statistic_id)
+    """Fetch new hourly readings and backfill them into the sensor's statistics."""
+    entity_id = _find_last_reading_entity_id(hass, entry)
+    if entity_id is None:
+        # Ocurre en el primerísimo ciclo, antes de que sensor.py haya
+        # registrado la entidad. __init__.py relanza este import justo
+        # después de montar las plataformas, así que no es un problema.
+        _LOGGER.debug(
+            "Import horario: la entidad 'última lectura' todavía no existe, "
+            "se reintentará en el próximo ciclo"
+        )
+        return
+
+    _LOGGER.debug("Import horario: iniciando para %s", entity_id)
 
     last_stats = await get_instance(hass).async_add_executor_job(
-        get_last_statistics, hass, 1, statistic_id, True, {"sum"}
+        get_last_statistics, hass, 1, entity_id, True, {"sum"}
     )
 
     threshold_utc = None
-    if last_stats.get(statistic_id):
-        last_entry = last_stats[statistic_id][0]
-        running_sum = last_entry["sum"] or 0.0
+    if last_stats.get(entity_id):
+        last_entry = last_stats[entity_id][0]
         threshold_utc = dt_util.utc_from_timestamp(last_entry["start"])
         fecha_inicio = dt_util.as_local(threshold_utc).date()
     else:
-        running_sum = 0.0
         fecha_inicio = date.today() - timedelta(days=INITIAL_BACKFILL_DAYS)
 
     fecha_fin = date.today()
@@ -94,12 +114,15 @@ async def async_import_hourly_statistics(
         if threshold_utc is not None and start_utc <= threshold_utc:
             continue  # ya importado en un ciclo anterior
 
-        running_sum += record["consumption"]
+        # "reading" es el totalizador absoluto del contador (m³): al ser ya
+        # de por sí un acumulado creciente, lo usamos tal cual tanto como
+        # estado de esa hora como como suma, igual que hace la propia
+        # entidad con su valor en vivo.
         statistics.append(
             StatisticData(
                 start=start_utc,
-                state=record["consumption"],
-                sum=round(running_sum, 3),
+                state=record["reading"],
+                sum=record["reading"],
             )
         )
 
@@ -115,9 +138,9 @@ async def async_import_hourly_statistics(
     metadata_kwargs = dict(
         has_mean=False,  # deprecado, se mantiene por compatibilidad con HA < 2026.x
         has_sum=True,
-        name=f"{entry.title} consumo horario",
-        source=DOMAIN,
-        statistic_id=statistic_id,
+        name=None,  # con statistic_id == entity_id, HA usa el nombre de la entidad
+        source="recorder",
+        statistic_id=entity_id,
         unit_of_measurement="m³",
     )
     if _HAS_MEAN_TYPE:
@@ -125,9 +148,9 @@ async def async_import_hourly_statistics(
 
     metadata = StatisticMetaData(**metadata_kwargs)
 
-    async_add_external_statistics(hass, metadata, statistics)
+    async_import_statistics(hass, metadata, statistics)
     _LOGGER.debug(
-        "Importados %d puntos horarios de consumo (%s)",
+        "Importados %d puntos horarios de consumo en %s",
         len(statistics),
-        statistic_id,
+        entity_id,
     )

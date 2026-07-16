@@ -17,15 +17,34 @@ Inspirada en el proyecto original para el portal francés
 
 ## Sensores
 
-| Sensor | Descripción | Unidad |
-| --- | --- | --- |
-| `sensor.hidraqua_consumo_diario` | Consumo del último día con lectura disponible. Compatible con el dashboard de Energía → Agua. Incluye el histórico en el atributo `historyConsumption`. | m³ |
-| `sensor.hidraqua_ultima_lectura` | Lectura acumulada del contador. | m³ |
+| Sensor | Descripción | Unidad | ¿Válido para Energía? |
+| --- | --- | --- | --- |
+| `sensor.hidraqua_ultima_lectura` | Totalizador real del contador. Recibe además el histórico **horario** importado directamente en sus estadísticas. | m³ | ✅ Sí — es la fuente recomendada |
+| `sensor.hidraqua_consumo_diario` | Consumo del último día con lectura disponible (valor informativo, se reinicia cada día). | m³ | ❌ No (a propósito) |
 
-> **Nota:** al igual que en el portal francés, Hidraqua publica los datos con
-> un retraso de al menos 24h (a veces más), según la frecuencia de telelectura
-> de tu zona. La integración solo puede devolver lo que el portal ya ha
-> publicado.
+## Consumo por horas en el dashboard de Energía
+
+El dashboard de Energía siempre lee de las **estadísticas** de la entidad
+seleccionada, no de su estado en vivo. Por eso, aunque `Última lectura` solo
+se actualiza cada 12h, su histórico de estadísticas se rellena por detrás con
+datos **horarios** reales del portal — así que al seleccionarla como fuente
+de agua, el panel pinta barras hora a hora, no solo un valor por ciclo.
+
+- Al añadir la integración por primera vez, se cargan los últimos **30 días**
+  de histórico horario.
+- En cada ciclo posterior, solo se importan las horas nuevas (incremental).
+- El portal permite consultar como máximo **1 año hacia atrás** en modo
+  horario. Si quieres forzar una carga inicial más amplia, edita
+  `INITIAL_BACKFILL_DAYS` en `statistics.py` antes de instalar.
+
+## Añadir el consumo al dashboard de Energía
+
+Ajustes → Energía → lápiz en "Agua" → Añadir consumo de agua → selecciona
+**`sensor.hidraqua_ultima_lectura`** (no el de "Consumo diario").
+
+> Si ya tenías configurado el sensor de "Consumo diario" como fuente de
+> Energía en una versión anterior, cámbialo por "Última lectura" — es el
+> correcto y además es el único que recibe el detalle horario.
 
 ## Instalación
 
@@ -50,23 +69,6 @@ Introduce tu usuario (DNI/NIE) y contraseña del área de cliente.
 
 > Si tu cuenta tiene activada la verificación en dos pasos, la integración no
 > podrá completar el login todavía.
-
-## Consumo por horas (estadísticas de larga duración)
-
-Además de los dos sensores, la integración importa automáticamente el
-histórico **horario** directamente en el motor de estadísticas de Home
-Assistant (no aparece como una entidad, sino como una fuente estadística
-externa llamada `Hidraqua consumo horario`, visible en **Historial** y en
-**Ajustes → Estadísticas** buscando "hidraqua").
-
-- Al añadir la integración por primera vez, carga los últimos **30 días** de
-  histórico horario.
-- En cada ciclo posterior, solo importa las horas nuevas desde la última
-  importación (incremental, no vuelve a pedir todo el histórico).
-- El portal permite consultar como máximo **1 año hacia atrás** en modo
-  horario. Si quieres forzar una carga inicial más amplia, bórrala en
-  Ajustes → Estadísticas y edita `INITIAL_BACKFILL_DAYS` en
-  `statistics.py` antes de recargar la integración.
 
 ## Añadir el consumo al dashboard de Energía
 

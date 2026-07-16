@@ -39,6 +39,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
+    # Primer intento de backfill horario: en el ciclo de
+    # async_config_entry_first_refresh() de arriba, la entidad
+    # "última lectura" todavía no existía (se crea justo en la línea
+    # anterior), así que ese primer intento se salta en silencio. Lo
+    # relanzamos ahora que las entidades ya están registradas.
+    hass.async_create_background_task(
+        coordinator._async_import_hourly_stats_safe(),
+        name="hidraqua_initial_hourly_stats",
+    )
+
     return True
 
 

@@ -13,7 +13,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import HidraquaDataUpdateCoordinator
-from .const import DOMAIN, MANUFACTURER
+from .const import (
+    DAILY_CONSUMPTION_UNIQUE_ID_SUFFIX,
+    DOMAIN,
+    LAST_READING_UNIQUE_ID_SUFFIX,
+    MANUFACTURER,
+)
 
 
 async def async_setup_entry(
@@ -50,12 +55,16 @@ class HidraquaBaseSensor(CoordinatorEntity, SensorEntity):
 
 
 class HidraquaDailyConsumptionSensor(HidraquaBaseSensor):
-    """Daily water consumption in m³ (feeds the Energy dashboard)."""
+    """Daily water consumption in m³ (valor informativo, se reinicia cada día)."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "daily_consumption"
     _attr_device_class = SensorDeviceClass.WATER
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    # MEASUREMENT y no TOTAL_INCREASING: este valor es "lo consumido hoy",
+    # no un totalizador que solo crece. Por eso no aparece como opción en el
+    # dashboard de Energía → Agua; la entidad correcta para eso es
+    # "Última lectura" (el totalizador real del contador).
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "m³"
     _attr_icon = "mdi:water"
 
@@ -63,7 +72,7 @@ class HidraquaDailyConsumptionSensor(HidraquaBaseSensor):
         self, coordinator: HidraquaDataUpdateCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_daily_consumption"
+        self._attr_unique_id = f"{entry.entry_id}_{DAILY_CONSUMPTION_UNIQUE_ID_SUFFIX}"
 
     @property
     def native_value(self):
@@ -80,7 +89,13 @@ class HidraquaDailyConsumptionSensor(HidraquaBaseSensor):
 
 
 class HidraquaLastReadingSensor(HidraquaBaseSensor):
-    """Absolute meter reading in m³."""
+    """Absolute meter reading in m³.
+
+    Esta es la entidad recomendada como fuente de "Agua" en el dashboard de
+    Energía: es el totalizador real del contador, y además recibe el
+    histórico horario importado por statistics.py, así que el panel de
+    Energía puede pintar consumo por horas, no solo por ciclo de 12h.
+    """
 
     _attr_has_entity_name = True
     _attr_translation_key = "last_reading"
@@ -93,7 +108,7 @@ class HidraquaLastReadingSensor(HidraquaBaseSensor):
         self, coordinator: HidraquaDataUpdateCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_last_reading"
+        self._attr_unique_id = f"{entry.entry_id}_{LAST_READING_UNIQUE_ID_SUFFIX}"
 
     @property
     def native_value(self):
