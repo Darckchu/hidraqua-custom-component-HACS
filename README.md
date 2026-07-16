@@ -32,7 +32,7 @@ Inspirada en el proyecto original para el portal francés
 ### Vía HACS (recomendado)
 
 1. HACS → menú ⋮ (arriba a la derecha) → **Repositorios personalizados**
-2. Repositorio: `https://github.com/Darckchu/hidraqua-custom-component-HACS/`
+2. Repositorio: `https://github.com/TU_USUARIO_GITHUB/hidraqua-custom-component-HACS`
 3. Categoría: **Integración**
 4. Instala la integración desde la lista de HACS
 5. Reinicia Home Assistant
@@ -50,6 +50,23 @@ Introduce tu usuario (DNI/NIE) y contraseña del área de cliente.
 
 > Si tu cuenta tiene activada la verificación en dos pasos, la integración no
 > podrá completar el login todavía.
+
+## Consumo por horas (estadísticas de larga duración)
+
+Además de los dos sensores, la integración importa automáticamente el
+histórico **horario** directamente en el motor de estadísticas de Home
+Assistant (no aparece como una entidad, sino como una fuente estadística
+externa llamada `Hidraqua consumo horario`, visible en **Historial** y en
+**Ajustes → Estadísticas** buscando "hidraqua").
+
+- Al añadir la integración por primera vez, carga los últimos **30 días** de
+  histórico horario.
+- En cada ciclo posterior, solo importa las horas nuevas desde la última
+  importación (incremental, no vuelve a pedir todo el histórico).
+- El portal permite consultar como máximo **1 año hacia atrás** en modo
+  horario. Si quieres forzar una carga inicial más amplia, bórrala en
+  Ajustes → Estadísticas y edita `INITIAL_BACKFILL_DAYS` en
+  `statistics.py` antes de recargar la integración.
 
 ## Añadir el consumo al dashboard de Energía
 

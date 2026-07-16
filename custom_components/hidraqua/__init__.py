@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import HidraquaApiError, HidraquaAuthError, HidraquaClient
 from .const import DOMAIN, PLATFORMS
+from .statistics import async_import_hourly_statistics
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_create_clientsession(hass)
     client = HidraquaClient(username, password, session)
 
-    coordinator = HidraquaDataUpdateCoordinator(hass, client)
+    coordinator = HidraquaDataUpdateCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})
@@ -58,18 +59,30 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 class HidraquaDataUpdateCoordinator(DataUpdateCoordinator):
     """Coordinator to fetch data from the Hidraqua portal."""
 
-    def __init__(self, hass: HomeAssistant, client: HidraquaClient) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, client: HidraquaClient
+    ) -> None:
         self.api = client
+        self._entry = entry
         super().__init__(
             hass, _LOGGER, name=DOMAIN, update_interval=SCAN_INTERVAL
         )
 
     async def _async_update_data(self):
         try:
-            return await self.api.async_update_all()
+            data = await self.api.async_update_all()
         except HidraquaAuthError as err:
             raise ConfigEntryNotReady(
                 "Credenciales de Hidraqua rechazadas"
             ) from err
         except HidraquaApiError as err:
             raise UpdateFailed(f"Error consultando Hidraqua: {err}") from err
+
+        # No dejamos que un fallo importando el histórico horario tumbe los
+        # sensores principales (que solo dependen del consumo diario).
+        try:
+            await async_import_hourly_statistics(self.hass, self._entry, self.api)
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception("Error importando estadísticas horarias de Hidraqua")
+
+        return data

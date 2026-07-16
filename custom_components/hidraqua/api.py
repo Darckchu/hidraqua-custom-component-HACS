@@ -3,12 +3,28 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
+
+# El portal devuelve fechas en español abreviado ("15 jul 2026"), independiente
+# de la configuración regional del sistema donde corra Home Assistant, así que
+# se mapea a mano en vez de depender de locale.
+_MESES_ES = {
+    "ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
+    "jul": 7, "ago": 8, "sep": 9, "oct": 10, "nov": 11, "dic": 12,
+}
+
+
+def _parse_fecha_hora(fecha_consumo: str, hora_consumo: str) -> datetime:
+    """Parse '15 jul 2026' + '11:06' into a naive local datetime."""
+    dia_str, mes_str, anio_str = fecha_consumo.strip().split()
+    mes = _MESES_ES[mes_str.lower()[:3]]
+    hora, minuto = (int(p) for p in hora_consumo.split(":"))
+    return datetime(int(anio_str), mes, int(dia_str), hora, minuto)
 
 BASE_URL = "https://hidraqua.veolia.es"
 LOGIN_PATH = "/login"
@@ -173,6 +189,76 @@ class HidraquaClient:
             inicio += tam_pagina
 
         return all_consumos
+
+    async def async_get_hourly_consumption(
+        self, fecha_inicio: date, fecha_fin: date
+    ) -> list[dict[str, Any]]:
+        """Return hourly consumption records between two dates (max 1 year span).
+
+        Each record: {"start": datetime, "consumption": float, "reading": float,
+        "estimated": bool}, sorted ascending (oldest first).
+        """
+        if not self._logged_in:
+            await self.async_login()
+
+        p_auth = await self._get_p_auth(CONSUMPTION_PATH)
+
+        raw: list[dict[str, Any]] = []
+        inicio, tam_pagina = 0, 20
+
+        while True:
+            params = {
+                "p_p_id": "MisConsumos",
+                "p_p_lifecycle": "2",
+                "p_p_state": "normal",
+                "p_p_mode": "view",
+                "p_p_cacheability": "cacheLevelPage",
+                "p_auth": p_auth,
+                "_MisConsumos_op": "buscarConsumosHoraria",
+                "_MisConsumos_fechaInicio": fecha_inicio.strftime("%d/%m/%Y"),
+                "_MisConsumos_fechaFin": fecha_fin.strftime("%d/%m/%Y"),
+                "_MisConsumos_inicio": str(inicio),
+                "_MisConsumos_fin": str(inicio + tam_pagina - 1),
+            }
+            async with self._session.get(
+                f"{BASE_URL}{CONSUMPTION_PATH}",
+                params=params,
+                headers={"User-Agent": USER_AGENT},
+            ) as resp:
+                if resp.status != 200:
+                    raise HidraquaApiError(
+                        f"Error {resp.status} obteniendo consumo horario"
+                    )
+                data = await resp.json(content_type=None)
+
+            if not isinstance(data, dict) or "consumos" not in data:
+                self._logged_in = False
+                raise HidraquaApiError(
+                    "Respuesta inesperada del portal (¿sesión caducada?)"
+                )
+
+            raw.extend(data.get("consumos", []))
+
+            if data.get("ultimaPagina", True):
+                break
+            inicio += tam_pagina
+
+        def _to_float(value: str) -> float:
+            return float(str(value).replace(",", "."))
+
+        records = [
+            {
+                "start": _parse_fecha_hora(r["fechaConsumo"], r["horaConsumo"]),
+                "consumption": _to_float(r["consumo"]),
+                "reading": _to_float(r["lectura"]),
+                "estimated": bool(r.get("lecturaEstimada", False)),
+            }
+            for r in raw
+        ]
+        # El portal las devuelve de más reciente a más antigua; las estadísticas
+        # de Home Assistant necesitan orden cronológico ascendente.
+        records.sort(key=lambda r: r["start"])
+        return records
 
     async def async_update_all(self) -> dict[str, Any]:
         """Fetch a rolling window of consumption data for the coordinator."""
