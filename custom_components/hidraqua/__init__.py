@@ -78,11 +78,20 @@ class HidraquaDataUpdateCoordinator(DataUpdateCoordinator):
         except HidraquaApiError as err:
             raise UpdateFailed(f"Error consultando Hidraqua: {err}") from err
 
-        # No dejamos que un fallo importando el histórico horario tumbe los
-        # sensores principales (que solo dependen del consumo diario).
+        # El backfill horario puede implicar muchas peticiones paginadas
+        # (hasta ~36 solo para 30 días). Lo lanzamos en segundo plano para no
+        # bloquear ni el arranque de HA ni las actualizaciones de los
+        # sensores principales, que solo dependen del consumo diario.
+        self.hass.async_create_background_task(
+            self._async_import_hourly_stats_safe(),
+            name="hidraqua_hourly_stats_import",
+        )
+
+        return data
+
+    async def _async_import_hourly_stats_safe(self) -> None:
+        """Wrapper que nunca deja escapar una excepción de la tarea en segundo plano."""
         try:
             await async_import_hourly_statistics(self.hass, self._entry, self.api)
         except Exception:  # pylint: disable=broad-except
             _LOGGER.exception("Error importando estadísticas horarias de Hidraqua")
-
-        return data

@@ -19,6 +19,15 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+try:
+    # Disponible desde HA 2024.x aprox.; en versiones futuras (2026.11+)
+    # sustituye por completo al antiguo booleano has_mean.
+    from homeassistant.components.recorder.statistics import StatisticMeanType
+
+    _HAS_MEAN_TYPE = True
+except ImportError:
+    _HAS_MEAN_TYPE = False
+
 # Al añadir la integración por primera vez no cargamos el año entero de golpe
 # (serían ~8760 llamadas paginadas): empezamos con un mes y desde ahí el
 # import es incremental en cada ciclo del coordinador.
@@ -103,14 +112,18 @@ async def async_import_hourly_statistics(
         )
         return
 
-    metadata = StatisticMetaData(
-        has_mean=False,
+    metadata_kwargs = dict(
+        has_mean=False,  # deprecado, se mantiene por compatibilidad con HA < 2026.x
         has_sum=True,
         name=f"{entry.title} consumo horario",
         source=DOMAIN,
         statistic_id=statistic_id,
         unit_of_measurement="m³",
     )
+    if _HAS_MEAN_TYPE:
+        metadata_kwargs["mean_type"] = StatisticMeanType.NONE
+
+    metadata = StatisticMetaData(**metadata_kwargs)
 
     async_add_external_statistics(hass, metadata, statistics)
     _LOGGER.debug(
