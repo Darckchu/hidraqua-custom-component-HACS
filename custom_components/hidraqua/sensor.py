@@ -59,11 +59,12 @@ class HidraquaDailyConsumptionSensor(HidraquaBaseSensor):
 
     _attr_has_entity_name = True
     _attr_translation_key = "daily_consumption"
-    _attr_device_class = SensorDeviceClass.WATER
-    # MEASUREMENT y no TOTAL_INCREASING: este valor es "lo consumido hoy",
-    # no un totalizador que solo crece. Por eso no aparece como opción en el
-    # dashboard de Energía → Agua; la entidad correcta para eso es
-    # "Última lectura" (el totalizador real del contador).
+    # Sin device_class: Home Assistant solo permite device_class "water"
+    # junto a state_class "total"/"total_increasing"/None, nunca con
+    # "measurement". Como este valor SÍ es un measurement (se reinicia cada
+    # día, no es un totalizador), dejamos device_class sin especificar y
+    # ponemos el icono a mano. La entidad con device_class water de verdad
+    # es "Última lectura".
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "m³"
     _attr_icon = "mdi:water"

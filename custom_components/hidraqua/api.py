@@ -67,11 +67,21 @@ class HidraquaClient:
             f"{BASE_URL}{referer_path}",
             headers={"User-Agent": USER_AGENT},
         ) as resp:
-            resp.raise_for_status()
+            if resp.status != 200:
+                # Marcamos la sesión como inválida para forzar un login
+                # nuevo en el próximo intento (p.ej. tras una caducidad de
+                # sesión, el portal puede devolver 404 en vez de redirigir
+                # a /login para esta página en concreto).
+                self._logged_in = False
+                raise HidraquaApiError(
+                    f"Error {resp.status} cargando {referer_path} "
+                    "(posible sesión caducada)"
+                )
             text = await resp.text()
 
         match = P_AUTH_RE.search(text)
         if not match:
+            self._logged_in = False
             raise HidraquaApiError(f"No se encontró p_auth en {referer_path}")
         return match.group(1)
 
