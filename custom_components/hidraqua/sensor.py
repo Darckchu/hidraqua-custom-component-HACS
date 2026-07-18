@@ -92,6 +92,14 @@ class HidraquaDailyConsumptionSensor(HidraquaBaseSensor):
 class HidraquaLastReadingSensor(HidraquaBaseSensor):
     """Absolute meter reading in m³.
 
+    state_class TOTAL (no TOTAL_INCREASING): un contador de agua físico no
+    se reinicia nunca a cero, es un total absoluto que solo crece. Usar
+    TOTAL_INCREASING activa en Home Assistant una lógica de "detección de
+    reinicios" pensada para contadores que sí pueden resetearse (p.ej. un
+    contador diario), y esa lógica entraba en conflicto con el histórico
+    horario importado manualmente, provocando saltos a valores negativos en
+    el dashboard de Energía.
+
     Esta es la entidad recomendada como fuente de "Agua" en el dashboard de
     Energía: es el totalizador real del contador, y además recibe el
     histórico horario importado por statistics.py, así que el panel de
@@ -101,7 +109,7 @@ class HidraquaLastReadingSensor(HidraquaBaseSensor):
     _attr_has_entity_name = True
     _attr_translation_key = "last_reading"
     _attr_device_class = SensorDeviceClass.WATER
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_native_unit_of_measurement = "m³"
     _attr_icon = "mdi:gauge"
 

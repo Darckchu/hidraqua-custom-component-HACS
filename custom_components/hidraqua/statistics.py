@@ -104,6 +104,11 @@ async def async_import_hourly_statistics(
 
     local_tz = dt_util.get_time_zone(hass.config.time_zone) or dt_util.DEFAULT_TIME_ZONE
 
+    # Con state_class TOTAL (no TOTAL_INCREASING), "sum" es directamente la
+    # lectura absoluta del contador en ese momento — igual que el propio
+    # estado en vivo de la entidad. Al no haber lógica de "detección de
+    # reinicios" de por medio, ambos coinciden sin ambigüedad y no hay
+    # discontinuidad entre el histórico importado y el valor en vivo.
     statistics: list[StatisticData] = []
     for record in records:
         local_dt = record["start"].replace(
@@ -114,10 +119,6 @@ async def async_import_hourly_statistics(
         if threshold_utc is not None and start_utc <= threshold_utc:
             continue  # ya importado en un ciclo anterior
 
-        # "reading" es el totalizador absoluto del contador (m³): al ser ya
-        # de por sí un acumulado creciente, lo usamos tal cual tanto como
-        # estado de esa hora como como suma, igual que hace la propia
-        # entidad con su valor en vivo.
         statistics.append(
             StatisticData(
                 start=start_utc,
